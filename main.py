@@ -114,3 +114,71 @@ age_gender_hist.add_legend()
 # Men who embarked on C had higher survival rate than women regardless of class
 # Generally Pclass 3 had a lower survival rate
 # Where a person embarked has a high influence of whether they survived
+
+# compare with the fare paid and where embarked with gender and survival
+fare_hist = sns.FacetGrid(train, row='Embarked', col='Survived', size=2.2, aspect=1.6)
+fare_hist.map(sns.barplot, 'Sex', 'Fare', alpha=0.8, ci=None)
+fare_hist.add_legend()
+
+# Observations made: 
+# On average, those who paid more, more likely to survive
+# Anyone embarking on Q had a low chance of survival, but also didn't pay much
+
+'''
+Remove the data points we don't need, and add custom data points
+'''
+
+# drop data
+train = train.drop(['Ticket', 'Cabin'], axis = 1)
+test = test.drop(['Ticket', 'Cabin'], axis = 1)
+fullset = [train, test]
+
+# create new features
+
+# check if title adds to the probability of survival
+for dataset in fullset:
+    dataset['Title'] = dataset.Name.str.extract(' ([A-Za-z]+)\.', expand=False)
+    
+title_dist = pd.crosstab(train['Title'], train['Sex'])
+
+# replace uncommon endings with more common ones
+for dataset in fullset:
+    dataset['Title'] = dataset['Title'].replace(['Lady', 'Countess', 'Capt', 'Col', \
+           'Don', 'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona'], 'Rare')
+    
+    dataset['Title'] = dataset['Title'].replace('Mlle', 'Miss')
+    dataset['Title'] = dataset['Title'].replace('Ms', 'Miss')
+    dataset['Title'] = dataset['Title'].replace('Mme', 'Mrs')
+
+title_survival = train[['Title', 'Survived']].groupby(['Title'], as_index=False).mean()
+
+# now that the titles are extracted and put into buckets, we can 
+# 1. turn them into numerical ordinals
+# 2. drop the name columns
+title_mapping = {"Mr": 1, "Miss": 2, "Mrs": 3, "Master": 4, "Rare": 5}
+for dataset in fullset:
+    dataset['Title'] = dataset['Title'].map(title_mapping)
+    dataset['Title'] = dataset['Title'].fillna(0)
+
+# check everything is ok
+train.head(10)
+
+# drop the name and passenger ID
+train = train.drop(['Name', 'PassengerId'], axis=1)
+test = test.drop(['Name', 'PassengerId'], axis=1)
+fullset = [train, test]
+
+'''
+Convert strings into numerical values
+'''
+
+# convert the genders into 0 and 1
+for dataset in fullset:
+    dataset['Sex'] = dataset['Sex'].map( {'female' : 1, 'male': 0}).astype(int)
+    
+# check everything is ok
+train.head(10)
+
+'''
+Fill in gaps between information
+'''

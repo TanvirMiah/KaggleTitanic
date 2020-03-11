@@ -6,6 +6,20 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
 
+# machine learning and analysis
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC, LinearSVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import Perceptron
+from sklearn.linear_model import SGDClassifier
+from sklearn.tree import DecisionTreeClassifier
+
+'''
+**********DATA ANALYSIS****************
+'''
+
 '''
 Import the data
 '''
@@ -287,3 +301,41 @@ for dataset in fullset:
     dataset['Embarked'] = dataset['Embarked'].map({'S':0, 'C':1, 'Q':2}).astype(int)
     
 train.head(10)
+
+'''
+Convert the fares into buckets and fill NA values
+'''
+
+median_fare = test.Fare.dropna().median()
+
+for dataset in test:
+    dataset['Fare'] = dataset['Fare'].fillna(median_fare)
+
+# check if everything is ok 
+test.head(10)
+
+# create FareBand using pandas
+train['FareBand'] = pd.qcut(train['Fare'], 4)
+fare_bands = train[['FareBand', 'Survived']].groupby(['FareBand'], as_index = False).mean().sort_values(by='FareBand', ascending=True)
+
+# turn bands into ordinals
+for dataset in fullset:
+    dataset.loc[ dataset['Fare'] <= 7.91, 'Fare'] = 0
+    dataset.loc[(dataset['Fare'] > 7.91) & (dataset['Fare'] <= 14.454), 'Fare'] = 1
+    dataset.loc[(dataset['Fare'] > 14.454) & (dataset['Fare'] <= 31), 'Fare'] = 2
+    dataset.loc[ dataset['Fare'] > 31, 'Fare'] = 3
+    dataset['Fare'] = dataset['Fare'].astype(int)
+    
+# drop the FareBand column
+train = train.drop(['FareBand'], axis = 1)
+fullset = [train, test]
+
+# check everything is ok 
+train.head(10)
+test.head(10)
+
+
+'''
+****************MODELING AND PREDICITNG*************
+'''
+

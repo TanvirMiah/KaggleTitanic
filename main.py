@@ -387,13 +387,13 @@ svc_mod_acc = (svc_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'SVC', 'Accuracy': svc_mod_acc}, ignore_index = True)
 
 # random forest classifier
-RFC = RandomForestClassifier(n_estimators = 20)
+RFC = RandomForestClassifier()
 RFC.fit(X_train, y_train)
 Y_RFC = RFC.predict(X_test)
 RFC_conmat = confusion_matrix(y_test, Y_RFC)
 RFC_correct = RFC_conmat[0,0] + RFC_conmat[1,1]
 RFC_acc = (RFC_correct/total_tests)
-model_accuracy = model_accuracy.append({'Model Name': 'Random Forrest Classifer (20 trees)', 'Accuracy': RFC_acc}, ignore_index = True)
+model_accuracy = model_accuracy.append({'Model Name': 'Random Forrest Classifer', 'Accuracy': RFC_acc}, ignore_index = True)
 
 # K Nearest Classifier
 knn = KNeighborsClassifier()
@@ -421,3 +421,9 @@ Dtree_conmat = confusion_matrix(y_test, Y_Dtree)
 Dtree_correct = Dtree_conmat[0,0] + Dtree_conmat[1,1]
 Dtree_acc = (Dtree_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'Decision Tree Classifier', 'Accuracy': Dtree_acc}, ignore_index = True)
+
+# prediction
+test = test.fillna(1)
+prediction = knn.predict(test)
+test_pass = pd.read_csv('test.csv')
+pd.DataFrame(data={"PassengerId": test_pass['PassengerId'], "Survived": prediction.astype(int)}).to_csv("submission.csv", index=False)

@@ -270,11 +270,15 @@ for dataset in fullset:
 family_size = train[['FamilySize', 'Survived']].groupby(['FamilySize'], as_index=False).mean().sort_values(by='Survived', ascending=False)
 
 # add an additonal feature to see if being alone makes a difference
+# removing the solo passengers from being included in the 'Larger than four' bin to remove the bias of low survival from being a solo passenger
 for dataset in fullset:
-    dataset['IsAlone'] = 0
-    dataset.loc[dataset['FamilySize'] == 1, 'IsAlone'] = 1
+    dataset['LargerThanFour'] = 0
+    dataset.loc[ dataset['FamilySize'] == 1, 'LargerThanFour'] = 0
+    dataset.loc[(dataset['FamilySize'] > 1) & (dataset['FamilySize'] <= 4), 'LargerThanFour'] = 1
+    dataset.loc[ dataset['FamilySize'] > 4, 'LargerThanFour'] = 2
+    dataset['LargerThanFour'] = dataset['LargerThanFour'].astype(int)
     
-is_alone_stats = train[['IsAlone', 'Survived']].groupby(['IsAlone'], as_index = False).mean()
+is_alone_stats = train[['LargerThanFour', 'Survived']].groupby(['LargerThanFour'], as_index = False).mean()
 
 # parch and sibsp and family size can be dropped as they are not needed, as IsAlone covers it
 train = train.drop(['Parch', 'SibSp', 'FamilySize'], axis = 1)
@@ -366,7 +370,6 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, rand
 # fill NA with a random bucket for now that is in the 14.4542 
 #X_test = test.fillna(1)
 #y_actual = sub_pred['Survived'].values
-
 
 # logistic regression
 logreg = LogisticRegression()

@@ -15,6 +15,9 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
+from xgboost import XGBClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
 
 '''
 **********DATA ANALYSIS****************
@@ -314,7 +317,7 @@ Convert the fares into buckets and fill NA values
 median_fare = test.Fare.dropna().median()
 
 for dataset in test:
-    dataset['Fare'] = dataset['Fare'].fillna(14.4542)
+    dataset['Fare'] = dataset['Fare'].fillna(1)
 
 # check if everything is ok 
 test.head(10)
@@ -360,13 +363,14 @@ are as follows:
 
 # create dataframe that logs accuracy of the different models
 model_accuracy = pd.DataFrame(columns=['Model Name', 'Accuracy'])
+model_accuracy_kfold = pd.DataFrame(columns=['Model Name', 'Accuracy'])
 # hardcoding value as I know there are 418 tests in the main test file
 total_tests = 223
 
 # Split the data up into train X and Y
 X = train.drop(['Survived'], axis = 1)
 y = train['Survived']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, random_state = 0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0)
 # fill NA with a random bucket for now that is in the 14.4542 
 #X_test = test.fillna(1)
 #y_actual = sub_pred['Survived'].values
@@ -379,6 +383,10 @@ regpred_conmat = confusion_matrix(y_test, Y_regpred)
 regpred_correct = regpred_conmat[0,0] + regpred_conmat[1,1]
 regpred_acc = regpred_correct/total_tests
 model_accuracy = model_accuracy.append({'Model Name': 'Logistic Regression', 'Accuracy': regpred_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = logreg, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'Logistic Regression', 'Accuracy': accuracies.mean()}, ignore_index = True)
+
 
 # svc
 svc_mod = SVC()
@@ -388,6 +396,9 @@ svc_conmat = confusion_matrix(y_test, Y_svcpred)
 svc_correct = svc_conmat[0,0] + svc_conmat[1,1]
 svc_mod_acc = (svc_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'SVC', 'Accuracy': svc_mod_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = svc_mod, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'SVC', 'Accuracy': accuracies.mean()}, ignore_index = True)
 
 # random forest classifier
 RFC = RandomForestClassifier()
@@ -397,6 +408,9 @@ RFC_conmat = confusion_matrix(y_test, Y_RFC)
 RFC_correct = RFC_conmat[0,0] + RFC_conmat[1,1]
 RFC_acc = (RFC_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'Random Forrest Classifer', 'Accuracy': RFC_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = RFC, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'Random Forest Classifer', 'Accuracy': accuracies.mean()}, ignore_index = True)
 
 # K Nearest Classifier
 knn = KNeighborsClassifier()
@@ -406,6 +420,9 @@ knn_conmat = confusion_matrix(y_test, Y_knn)
 knn_correct = knn_conmat[0,0] + knn_conmat[1,1]
 knn_acc = (knn_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'K Neighbors Classifier', 'Accuracy': knn_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = knn, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'K Nearest Neighbour', 'Accuracy': accuracies.mean()}, ignore_index = True)
 
 # GaussianNB
 gnb = GaussianNB()
@@ -415,6 +432,9 @@ gnb_conmat = confusion_matrix(y_test, Y_gnb)
 gnb_correct = gnb_conmat[0,0] + gnb_conmat[1,1]
 gnb_acc = (gnb_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'GaussianNB', 'Accuracy': gnb_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = gnb, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'Naive Bayes', 'Accuracy': accuracies.mean()}, ignore_index = True)
 
 # Decision tree
 Dtree = DecisionTreeClassifier()
@@ -424,9 +444,24 @@ Dtree_conmat = confusion_matrix(y_test, Y_Dtree)
 Dtree_correct = Dtree_conmat[0,0] + Dtree_conmat[1,1]
 Dtree_acc = (Dtree_correct/total_tests)
 model_accuracy = model_accuracy.append({'Model Name': 'Decision Tree Classifier', 'Accuracy': Dtree_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = Dtree, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'Decision Tree Classifier', 'Accuracy': accuracies.mean()}, ignore_index = True)
+
+# XGBoost
+xgb = XGBClassifier()
+xgb.fit(X_train, y_train)
+Y_xgb = xgb.predict(X_test)
+xgb_conmat = confusion_matrix(y_test, Y_xgb)
+xgb_correct = xgb_conmat[0,0] + xgb_conmat[1,1]
+xgb_acc = (xgb_correct/total_tests)
+model_accuracy = model_accuracy.append({'Model Name': 'XGBoost', 'Accuracy': xgb_acc}, ignore_index = True)
+# apply k-fold cross validation and get mean accuracy
+accuracies = cross_val_score(estimator = xgb, X = X_train, y = y_train, cv = 10)
+model_accuracy_kfold = model_accuracy_kfold.append({'Model Name': 'XGBoost', 'Accuracy': accuracies.mean()}, ignore_index = True)
 
 # prediction
 test = test.fillna(1)
-prediction = knn.predict(test)
+prediction = xgb.predict(test)
 test_pass = pd.read_csv('test.csv')
 pd.DataFrame(data={"PassengerId": test_pass['PassengerId'], "Survived": prediction.astype(int)}).to_csv("submission.csv", index=False)

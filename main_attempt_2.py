@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 # preprocessing
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder, Imputer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 # machine learning and analysis
 from sklearn.linear_model import LogisticRegression
@@ -21,6 +21,7 @@ from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.decomposition import PCA
 
 '''
 **********DATA ANALYSIS****************
@@ -32,118 +33,6 @@ Import the data
 train = pd.read_csv('train.csv')
 test = pd.read_csv('test.csv')
 fullset = [train, test]
-sub_pred = pd.read_csv('gender_submission.csv')
-
-'''
-Analyse the data by spotting basic trends 
-'''
-# first see what the column headers are
-print(train.columns.values)
-
-# print the head of the data to see what is categorical and what is numerical
-# have a quick look at the data in the top 5 rows
-train.head()
-# See what columns have null values
-train_null_counts = train.isnull().sum()
-train_null_counts[train_null_counts > 0].sort_values(ascending = False)
-
-test_null_counts = test.isnull().sum()
-test_null_counts[test_null_counts > 0].sort_values(ascending = False)
-
-# look at the data types
-train.info()
-print('-', 40)
-test.info()
-
-# understand the data distribution for Numerical values
-train_num_dist = train.describe()
-test_num_dist = test.describe()
-
-# understand the data distribution for Categorial values
-train_cat_dist = test.describe(include=['O'])
-test_cat_dist = test.describe(include=['O'])
-
-'''
-Assumptions from initial analysis
-'''
-
-'''
-Correlating - Identify early on what features will contribute to this
-
-Completing - What features do we need to fill the gaps? 
-1. Age, as it is correlated to survival
-2. Embarked as it might contribute to the survival
-
-Correcting - What features can we drop? 
-1. Ticketing as there are a lot of duplicates
-2. Cabin as there are a lot of incomplete values
-3. PassengerID as that doesn't tell us anything
-4. Name as it's not standard and doesn't seem to contribute to anything
-
-Creating - Do we want to create any new features? 
-1. A new feature called family, baseed of Parch and SibSp
-2. Extract the titles from the name 
-3. Put Age into age bands
-4. Fare range as that might be an indicator if someone survives
-
-Classifying - In addition to the stated assumptions above, from the problem statement, what else can we say? 
-1. Women were more likely to have survived
-2. Children more likely to have survived
-3. The upper-class more likely to have survived
-'''
-
-'''
-Analyse data by pivoting tables
-'''
-
-# Passenger Class pivot
-pclass_pivot = train[['Pclass', 'Survived']].groupby(['Pclass'], as_index=False).mean().sort_values(by='Survived', ascending=False)
-
-# Gender pivot
-gender_pivot = train[['Sex', 'Survived']].groupby(['Sex'], as_index=False).mean().sort_values(by='Survived', ascending=False)
-
-# Siblings pivot
-sib_pivot = train[['SibSp', 'Survived']].groupby(['SibSp'], as_index=False).mean().sort_values(by='Survived', ascending=False)
-
-# Parents pivot
-parch_pivot = train[['Parch', 'Survived']].groupby(['Parch'], as_index=False).mean().sort_values(by='Survived', ascending=False)
-
-'''
-Data Visualisation
-'''
-
-# plot histogram of age to identify age buckets
-age_hist = sns.FacetGrid(train, col='Survived')
-age_hist.map(plt.hist, 'Age', bins=20)
-
-# talk about observations made
-
-# plot Pclass and age against survival
-Pclass_age_hist = sns.FacetGrid(train, col='Survived', row='Pclass', size=2.2, aspect=1.6)
-Pclass_age_hist.map(plt.hist, 'Age', alpha=.8, bins=20)
-Pclass_age_hist.add_legend()
-
-# talk about observations made
-
-# plot Pclass, gender and embarked against survival
-age_gender_hist = sns.FacetGrid(train, col = 'Embarked', size = 2.2, aspect = 1.6)
-age_gender_hist.map(sns.pointplot, 'Pclass', 'Survived', 'Sex', palette = 'deep')
-age_gender_hist.add_legend()
-
-# Observations made:
-# Women who embarked in S or Q generally survived regardless of PClass
-# Men who embarked on C had higher survival rate than women regardless of class
-# Generally Pclass 3 had a lower survival rate
-# Where a person embarked has a high influence of whether they survived
-
-# compare with the fare paid and where embarked with gender and survival
-fare_hist = sns.FacetGrid(train, row='Embarked', col='Survived', size=2.2, aspect=1.6)
-fare_hist.map(sns.barplot, 'Sex', 'Fare', alpha=0.8, ci=None)
-fare_hist.add_legend()
-
-# Observations made: 
-# On average, those who paid more, more likely to survive
-# Anyone embarking on Q had a low chance of survival, but also didn't pay much
 
 '''
 Remove the data points we don't need, and add custom data points
@@ -159,8 +48,6 @@ fullset = [train, test]
 # check if title adds to the probability of survival
 for dataset in fullset:
     dataset['Title'] = dataset.Name.str.extract(' ([A-Za-z]+)\.', expand=False)
-    
-title_dist = pd.crosstab(train['Title'], train['Sex'])
 
 # replace uncommon endings with more common ones
 for dataset in fullset:
@@ -171,20 +58,14 @@ for dataset in fullset:
     dataset['Title'] = dataset['Title'].replace('Ms', 'Miss')
     dataset['Title'] = dataset['Title'].replace('Mme', 'Mrs')
 
-title_survival = train[['Title', 'Survived']].groupby(['Title'], as_index=False).mean()
-
 # now that the titles are extracted and put into buckets, we can 
 # 1. turn them into numerical ordinals
 # 2. drop the name columns
-'''
 title_mapping = {"Mr": 1, "Miss": 2, "Mrs": 3, "Master": 4, "Rare": 5}
 for dataset in fullset:
     dataset['Title'] = dataset['Title'].map(title_mapping)
     dataset['Title'] = dataset['Title'].fillna(0)
-'''
 
-# check everything is ok
-train.head(10)
 
 # drop the name and passenger ID
 train = train.drop(['Name', 'PassengerId'], axis=1)
@@ -199,26 +80,28 @@ Convert strings into numerical values
 for dataset in fullset:
     dataset['Sex'] = dataset['Sex'].map( {'female' : 1, 'male': 0}).astype(int)
     
+
+'''
+#get onehotencoder
+onehotencoder = OneHotEncoder()
+#extract the column that needs to be onehotencoded
+train_test = train['Sex'].map( {'female' : 1, 'male' : 0}).astype(int)
+#turn into an array and reshape so that it can be onehotencoded
+train_test = np.array(train_test).reshape(-1 , 1)
+#fit and transform the array
+train_test = onehotencoder.fit_transform(train_test).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = train_test)
+#create a dummy train dataframe to keep the real test dataframe intact
+train_onehotencode_test = train
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+train_onehotencode_test = train_onehotencode_test.merge(onehote_df, on = train_onehotencode_test.index)
+#drop columns
+train_onehotencode_test = train_onehotencode_test.drop(['key_0'], axis=1)
+'''
+
 # check everything is ok
 train.head(10)
-
-'''
-Fill in null values
-'''
-
-'''
-Multiple ways to approach this: 
-1. Generate random numbers from standard deviation and mean
-2. Guess the missing values from other values from the data (like correlatinh Age, Gender and PClass)
-3. Do a bit of both
-
-Method 1 and 3 generate randomness in our models, so best to avoid those.
-'''
-
-# visualise the correlation between Pclass and gender against age
-pclass_age_corr = sns.FacetGrid(train, row='Pclass', col='Sex', size=2.2, aspect=1.6)
-pclass_age_corr.map(plt.hist, 'Age', alpha =.9, bins=20)
-pclass_age_corr.add_legend()
 
 # write observations made
 
@@ -274,8 +157,6 @@ Combine the Parch and Siblings data to a single datapoint
 '''
 for dataset in fullset:
     dataset['FamilySize'] = dataset['SibSp'] + dataset['Parch'] + 1
-    
-family_size = train[['FamilySize', 'Survived']].groupby(['FamilySize'], as_index=False).mean().sort_values(by='Survived', ascending=False)
 
 # add an additonal feature to see if being alone makes a difference
 # removing the solo passengers from being included in the 'Larger than four' bin to remove the bias of low survival from being a solo passenger
@@ -286,7 +167,6 @@ for dataset in fullset:
     dataset.loc[ dataset['FamilySize'] > 4, 'LargerThanFour'] = 2
     dataset['LargerThanFour'] = dataset['LargerThanFour'].astype(int)
     
-is_alone_stats = train[['LargerThanFour', 'Survived']].groupby(['LargerThanFour'], as_index = False).mean()
 
 # parch and sibsp and family size can be dropped as they are not needed, as IsAlone covers it
 train = train.drop(['Parch', 'SibSp', 'FamilySize'], axis = 1)
@@ -312,10 +192,7 @@ embarked_freq = train[['Embarked', 'Survived']].groupby(['Embarked'], as_index=F
 # convert Embarked into ordinal numbers
 for dataset in fullset:
     dataset['Embarked'] = dataset['Embarked'].map({'S':0, 'C':1, 'Q':2}).astype(int)
-
-onehotencoder = OneHotEncoder(categorical_features = [5])
-train = onehotencoder.fit_transform(train).toarray()
-test = onehotencoder.fit_transform(test).toarray()    
+ 
 train.head(10)
 
 '''
@@ -323,10 +200,11 @@ Convert the fares into buckets and fill NA values
 '''
 # this doesn't seem to work for whatever reason
 median_fare = test.Fare.dropna().median()
-
+'''
 for dataset in test:
     dataset['Fare'] = dataset['Fare'].fillna(1)
-test['Fare'] = test['Fare'].fillna(1)
+    '''
+test['Fare'] = test['Fare'].fillna(14.4542)
 
 # check if everything is ok 
 test.head(10)
@@ -344,7 +222,6 @@ for dataset in fullset:
     dataset['Fare'] = dataset['Fare'].astype(int)
     
 # drop the FareBand column
-test = test.drop(['FareBand'], axis = 1)
 train = train.drop(['FareBand'], axis = 1)
 fullset = [train, test]
 
@@ -352,6 +229,133 @@ fullset = [train, test]
 train.head(10)
 test.head(10)
 
+'''
+*********************OneHotEncoding*****************************
+'''
+
+#OneHotEncode Sex
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+train_test = train['Sex']
+#turn into an array and reshape so that it can be onehotencoded
+train_test = np.array(train_test).reshape(-1 , 1)
+#fit and transform the array
+train_test = onehotencoder.fit_transform(train_test).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = train_test)
+#create a dummy train dataframe to keep the real test dataframe intact
+train_dummy = train
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+train_dummy = train_dummy.merge(onehote_df, on = train_dummy.index)
+#drop columns
+train_dummy = train_dummy.drop(['Sex', 'key_0'], axis=1)
+train = train_dummy
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+test_t = test['Sex']
+#turn into an array and reshape so that it can be onehotencoded
+test_t = np.array(test_t).reshape(-1 , 1)
+#fit and transform the array
+test_t = onehotencoder.fit_transform(test_t).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = test_t)
+#create a dummy train dataframe to keep the real test dataframe intact
+test_dummy = test
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+test_dummy = test_dummy.merge(onehote_df, on = test_dummy.index)
+#drop columns
+test_dummy = test_dummy.drop(['Sex', 'key_0'], axis=1)
+test = test_dummy
+
+#OneHotEncode Title
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+train_test = train['Title']
+#turn into an array and reshape so that it can be onehotencoded
+train_test = np.array(train_test).reshape(-1 , 1)
+#fit and transform the array
+train_test = onehotencoder.fit_transform(train_test).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = train_test)
+#create a dummy train dataframe to keep the real test dataframe intact
+train_dummy = train
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+train_dummy = train_dummy.merge(onehote_df, on = train_dummy.index)
+#drop columns
+train_dummy = train_dummy.drop(['Title', 'key_0'], axis=1)
+train = train_dummy
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+test_t = test['Title']
+#turn into an array and reshape so that it can be onehotencoded
+test_t = np.array(test_t).reshape(-1 , 1)
+#fit and transform the array
+test_t = onehotencoder.fit_transform(test_t).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = test_t)
+#create a dummy train dataframe to keep the real test dataframe intact
+test_dummy = test
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+test_dummy = test_dummy.merge(onehote_df, on = test_dummy.index)
+#drop columns
+test_dummy = test_dummy.drop(['Title', 'key_0'], axis=1)
+test = test_dummy
+
+#OneHotEncode Embarked
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+train_test = train['Embarked']
+#turn into an array and reshape so that it can be onehotencoded
+train_test = np.array(train_test).reshape(-1 , 1)
+#fit and transform the array
+train_test = onehotencoder.fit_transform(train_test).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = train_test)
+#create a dummy train dataframe to keep the real test dataframe intact
+train_dummy = train
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+train_dummy = train_dummy.merge(onehote_df, on = train_dummy.index)
+#drop columns
+train_dummy = train_dummy.drop(['Embarked', 'key_0'], axis=1)
+train = train_dummy
+
+onehotencoder = OneHotEncoder(categories = 'auto')
+#extract the column that needs to be onehotencoded
+test_t = test['Embarked']
+#turn into an array and reshape so that it can be onehotencoded
+test_t = np.array(test_t).reshape(-1 , 1)
+#fit and transform the array
+test_t = onehotencoder.fit_transform(test_t).toarray()
+#turn the array into a dataframe
+onehote_df = pd.DataFrame(data = test_t)
+#create a dummy train dataframe to keep the real test dataframe intact
+test_dummy = test
+#merge the dummy train dataframe with the new dataframe of the onehotencoded data
+test_dummy = test_dummy.merge(onehote_df, on = test_dummy.index)
+#drop columns
+test_dummy = test_dummy.drop(['Embarked', 'key_0'], axis=1)
+test = test_dummy
+
+'''
+********************Standard Scalar************************************
+'''
+
+sc_X = StandardScaler()
+train_dummy = train
+train_dummy = sc_X.fit_transform(train_dummy)
+train = pd.DataFrame(data = train_dummy)
+
+test_dummy = test
+test_dummy = sc_X.fit_transform(test_dummy)
+test = pd.DataFrame(data = test_dummy)
+
+lab_enc = LabelEncoder()
+train = lab_enc.fit_transform(train)
 
 '''
 ****************MODELING AND PREDICITNG*************
@@ -373,11 +377,11 @@ are as follows:
 # create dataframe that logs accuracy of the different models
 model_accuracy = pd.DataFrame(columns=['Model Name', 'Accuracy (No K-Fold)', 'Accuracy (K-Fold)'])
 # hardcoding value as I know there are 418 tests in the main test file
-total_tests = 223
+total_tests = 179
 
 # Split the data up into train X and Y
-X = train.drop(['Survived'], axis = 1)
-y = train['Survived']
+X = train.drop(train.columns[0], axis = 1)
+y = train[0]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0)
 # fill NA with a random bucket for now that is in the 14.4542 
 #X_test = test.fillna(1)
@@ -390,7 +394,6 @@ Y_regpred = logreg.predict(X_test)
 regpred_conmat = confusion_matrix(y_test, Y_regpred)
 regpred_correct = regpred_conmat[0,0] + regpred_conmat[1,1]
 regpred_acc = regpred_correct/total_tests
-model_accuracy = model_accuracy.append({'Model Name': 'Logistic Regression', 'Accuracy': regpred_acc}, ignore_index = True)
 # apply k-fold cross validation and get mean accuracy
 accuracies = cross_val_score(estimator = logreg, X = X_train, y = y_train, cv = 10)
 model_accuracy = model_accuracy.append({'Model Name': 'Logistic Regression', 'Accuracy (No K-Fold)': regpred_acc, 'Accuracy (K-Fold)':  accuracies.mean()}, ignore_index = True)
